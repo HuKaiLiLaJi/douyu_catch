@@ -36,6 +36,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--mysql-password", default=os.getenv("DOUYU_MYSQL_PASSWORD", os.getenv("MYSQL_PWD", "")))
     parser.add_argument("--mysql-db", default=os.getenv("DOUYU_MYSQL_DB", "douyu_danmu"))
     parser.add_argument("--mysql-table", default=os.getenv("DOUYU_MYSQL_TABLE", "danmu_messages"))
+    parser.add_argument("--mysql-per-room", action="store_true", help="Save each room into its own table, for example danmu_room_4767111")
     return parser
 
 
@@ -50,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
             password=args.mysql_password,
             database=args.mysql_db,
             table=args.mysql_table,
+            per_room_tables=args.mysql_per_room,
         )
 
     try:

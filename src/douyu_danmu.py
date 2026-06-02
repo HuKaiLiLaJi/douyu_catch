@@ -23,6 +23,7 @@ from .client import (
 )
 from .collector import collect, safe_print
 from .models import DanmuMessage, MySQLConfig
+from .room_status import RoomStatus, fetch_room_status
 from .protocol import (
     MESSAGE_TYPE_CLIENT,
     DouyuProtocolError,
@@ -34,7 +35,7 @@ from .protocol import (
     recv_exact,
     unescape_value,
 )
-from .storage import MySQLDanmuWriter, parse_mysql_datetime, quote_mysql_identifier
+from .storage import MySQLDanmuWriter, parse_mysql_datetime, quote_mysql_identifier, room_table_name
 from .websocket_transport import DouyuWebSocket
 
 
@@ -52,16 +53,19 @@ __all__ = [
     "DouyuWebSocket",
     "MySQLConfig",
     "MySQLDanmuWriter",
+    "RoomStatus",
     "build_parser",
     "collect",
     "decode_fields",
     "encode_fields",
     "escape_value",
+    "fetch_room_status",
     "main",
     "pack_message",
     "parse_mysql_datetime",
     "positive_int",
     "quote_mysql_identifier",
+    "room_table_name",
     "read_frame",
     "recv_exact",
     "safe_print",

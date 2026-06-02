@@ -38,3 +38,4 @@ class MySQLConfig:
     database: str
     table: str = "danmu_messages"
     charset: str = "utf8mb4"
+    per_room_tables: bool = False

@@ -35,6 +35,7 @@ class DouyuDanmuClient:
         timeout: float = 15.0,
         transport: str = "tcp",
         websocket_tls: bool = False,
+        read_timeout: float | None = None,
     ) -> None:
         self.room_id = str(room_id)
         self.host = host
@@ -44,6 +45,7 @@ class DouyuDanmuClient:
         self.timeout = timeout
         self.transport = transport
         self.websocket_tls = websocket_tls
+        self.read_timeout = read_timeout
         self._sock: socket.socket | DouyuWebSocket | None = None
         self._closed = threading.Event()
         self._send_lock = threading.Lock()
@@ -56,7 +58,7 @@ class DouyuDanmuClient:
             self._sock = ws
         else:
             sock = socket.create_connection((self.host, self.port), timeout=self.timeout)
-            sock.settimeout(None)
+            sock.settimeout(self.read_timeout)
             self._sock = sock
         self._send_command({"type": "loginreq", "roomid": self.room_id})
         self._send_command({"type": "joingroup", "rid": self.room_id, "gid": self.group_id})
@@ -84,19 +86,40 @@ class DouyuDanmuClient:
             self.connect()
 
         while not self._closed.is_set():
-            frame = self._read_message()
-            fields = decode_fields(frame)
-            if fields.get("type") != "chatmsg":
+            try:
+                message = self._read_chat_message()
+            except socket.timeout:
                 continue
-            yield DanmuMessage(
-                room_id=self.room_id,
-                nickname=fields.get("nn", ""),
-                text=fields.get("txt", ""),
-                user_id=fields.get("uid", ""),
-                level=fields.get("level", ""),
-                raw_type=fields.get("type", "chatmsg"),
-                received_at=datetime.now(timezone.utc).isoformat(),
-            )
+            if message is not None:
+                yield message
+
+    def messages_for(self, seconds: int | float) -> Iterator[DanmuMessage]:
+        if self._sock is None:
+            self.connect()
+
+        deadline = time.monotonic() + float(seconds)
+        while not self._closed.is_set() and time.monotonic() < deadline:
+            try:
+                message = self._read_chat_message()
+            except socket.timeout:
+                continue
+            if message is not None:
+                yield message
+
+    def _read_chat_message(self) -> DanmuMessage | None:
+        frame = self._read_message()
+        fields = decode_fields(frame)
+        if fields.get("type") != "chatmsg":
+            return None
+        return DanmuMessage(
+            room_id=self.room_id,
+            nickname=fields.get("nn", ""),
+            text=fields.get("txt", ""),
+            user_id=fields.get("uid", ""),
+            level=fields.get("level", ""),
+            raw_type=fields.get("type", "chatmsg"),
+            received_at=datetime.now(timezone.utc).isoformat(),
+        )
 
     def _send_command(self, fields: dict[str, object]) -> None:
         data = pack_message(encode_fields(fields))

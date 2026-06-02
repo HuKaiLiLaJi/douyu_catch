@@ -8,7 +8,9 @@ from src.douyu_danmu import (
     pack_message,
     parse_mysql_datetime,
     quote_mysql_identifier,
+    room_table_name,
     read_frame,
+    fetch_room_status,
 )
 
 
@@ -43,6 +45,16 @@ class DouyuProtocolTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             quote_mysql_identifier("bad`table")
 
+    def test_room_table_name_uses_room_id(self):
+        self.assertEqual(room_table_name("4767111"), "danmu_room_4767111")
+        with self.assertRaises(ValueError):
+            room_table_name("4767111;drop")
+
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RoomStatusTests(unittest.TestCase):
+    def test_room_status_helper_is_exported(self):
+        self.assertTrue(callable(fetch_room_status))

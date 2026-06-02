@@ -1,4 +1,4 @@
-# Douyu Danmu Collector
+﻿# Douyu Danmu Collector
 
 A command-line Douyu live danmu collector. It connects to Douyu's barrage TCP
 service, joins a room group, keeps the connection alive, and captures `chatmsg`
@@ -32,6 +32,28 @@ Print JSON Lines to the terminal too:
 python -m src.douyu_danmu 93589 --limit 30 --json --output douyu_93589.jsonl --host danmuproxy.douyu.com --port 8601
 ```
 
+
+## Web UI
+
+Start the local web app:
+
+```powershell
+python -m src.web_app
+```
+
+Open:
+
+```text
+http://127.0.0.1:5000
+```
+
+The page lets you enter a Douyu room id and a capture duration, then streams danmu to the browser in real time. Each new capture clears the current panel first. The backend uses `danmuproxy.douyu.com:8601`.
+
+Captured messages are saved to MySQL by room. For room `4767111`, the table name is `danmu_room_4767111`. Multiple captures of the same room append to the same table. Query messages in time order with:
+
+```sql
+SELECT * FROM danmu_room_4767111 ORDER BY received_at ASC;
+```
 ## MySQL
 
 The recommended database/table schema is:
@@ -64,6 +86,12 @@ Save messages to MySQL:
 
 ```powershell
 python -m src.douyu_danmu 93589 --limit 30 --mysql --mysql-user douyu_user --mysql-password "your_password" --mysql-db douyu_danmu --host danmuproxy.douyu.com --port 8601
+
+Per-room tables from CLI:
+
+```powershell
+python -m src.douyu_danmu 93589 --limit 30 --mysql --mysql-per-room --mysql-user douyu_user --mysql-password "your_password" --mysql-db douyu_danmu --host danmuproxy.douyu.com --port 8601
+```
 ```
 
 To avoid putting the password in command history:
@@ -96,3 +124,4 @@ Each message contains:
 ```powershell
 python -m unittest discover -s tests
 ```
+

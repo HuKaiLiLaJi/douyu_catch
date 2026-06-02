@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>&#26007;&#40060;&#24377;&#24149;&#25235;&#21462;</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="toolbar" aria-label="&#24377;&#24149;&#25235;&#21462;&#25511;&#21046;">
+        <div class="brand">
+          <span class="brand-mark">DY</span>
+          <div>
+            <h1>&#26007;&#40060;&#24377;&#24149;&#25235;&#21462;</h1>
+            <p>&#36755;&#20837;&#25151;&#38388;&#21495;&#21644;&#25235;&#21462;&#26102;&#38271;&#65292;&#23454;&#26102;&#25509;&#25910; chatmsg &#24377;&#24149;&#12290;</p>
+          </div>
+        </div>
+
+        <form id="capture-form" class="capture-form">
+          <label>
+            <span>&#25151;&#38388;&#21495;</span>
+            <input id="room-id" name="room_id" inputmode="numeric" autocomplete="off" placeholder="&#20363;&#22914; 1126960" required>
+          </label>
+
+          <label>
+            <span>&#25235;&#21462;&#26102;&#38271;</span>
+            <input id="duration" name="duration" type="number" min="1" max="3600" value="10" required>
+          </label>
+
+          <label>
+            <span>&#21333;&#20301;</span>
+            <select id="duration-unit" name="duration_unit">
+              <option value="1">&#31186;</option>
+              <option value="60">&#20998;&#38047;</option>
+            </select>
+          </label>
+
+          <button id="capture-button" type="submit">&#24320;&#22987;&#25235;&#21462;</button>
+        </form>
+      </section>
+
+      <section class="status-row" aria-live="polite">
+        <div id="status" class="status">&#31561;&#24453;&#36755;&#20837;</div>
+        <div id="summary" class="summary"></div>
+      </section>
+
+      <section class="table-wrap" aria-label="&#24377;&#24149;&#32467;&#26524;">
+        <table>
+          <thead>
+            <tr>
+              <th>&#26102;&#38388;</th>
+              <th>&#26165;&#31216;</th>
+              <th>&#31561;&#32423;</th>
+              <th>&#24377;&#24149;&#20869;&#23481;</th>
+            </tr>
+          </thead>
+          <tbody id="messages">
+            <tr class="empty-row">
+              <td colspan="4">&#26242;&#26080;&#24377;&#24149;</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+
+    <script src="{{ url_for('static', filename='app.js') }}" charset="utf-8"></script>
+  </body>
+</html>
