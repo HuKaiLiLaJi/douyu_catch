@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Iterator
+from collections.abc import Callable, Iterator
 import socket
 import struct
 import threading
@@ -93,16 +93,24 @@ class DouyuDanmuClient:
             if message is not None:
                 yield message
 
-    def messages_for(self, seconds: int | float) -> Iterator[DanmuMessage]:
+    def messages_for(
+        self,
+        seconds: int | float,
+        should_stop: Callable[[], bool] | None = None,
+    ) -> Iterator[DanmuMessage]:
         if self._sock is None:
             self.connect()
 
         deadline = time.monotonic() + float(seconds)
         while not self._closed.is_set() and time.monotonic() < deadline:
+            if should_stop is not None and should_stop():
+                return
             try:
                 message = self._read_chat_message()
             except socket.timeout:
                 continue
+            if should_stop is not None and should_stop():
+                return
             if message is not None:
                 yield message
 
