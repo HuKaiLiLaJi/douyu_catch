@@ -27,7 +27,10 @@ class RoomStatus:
 
 def fetch_room_status(room_id: str, timeout: float = 10.0) -> RoomStatus:
     room_id = str(room_id).strip()
-    request = urllib.request.Request(DOUYU_ROOM_URL.format(room_id=room_id), headers={"User-Agent": USER_AGENT})
+    request = urllib.request.Request(
+        DOUYU_ROOM_URL.format(room_id=room_id),
+        headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"},
+    )
     html = urllib.request.urlopen(request, timeout=timeout).read().decode("utf-8", "ignore")
 
     show_status = _extract_first_int(html, ["show_status", "showStatus"])
