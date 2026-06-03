@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import json
 import re
 import urllib.request
 
 
 DOUYU_ROOM_URL = "https://www.douyu.com/{room_id}"
+DOUYU_ROOM_API_URL = "http://open.douyucdn.cn/api/RoomApi/room/{room_id}"
 USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36"
 
 
@@ -45,7 +47,41 @@ def fetch_room_status(room_id: str, timeout: float = 10.0) -> RoomStatus:
         return RoomStatus(normalized_room_id, "recorded", "\u5f55\u64ad", room_name, show_status, video_loop)
     if show_status == 2:
         return RoomStatus(normalized_room_id, "offline", "\u5173\u64ad", room_name, show_status, video_loop)
+
+    api_status = _fetch_room_api_status(room_id, timeout)
+    if api_status is not None:
+        return api_status
     return RoomStatus(normalized_room_id, "unknown", "\u672a\u77e5", room_name, show_status, video_loop)
+
+
+def _fetch_room_api_status(room_id: str, timeout: float) -> RoomStatus | None:
+    request = urllib.request.Request(
+        DOUYU_ROOM_API_URL.format(room_id=room_id),
+        headers={"User-Agent": USER_AGENT, "Accept-Encoding": "identity"},
+    )
+    try:
+        payload = urllib.request.urlopen(request, timeout=timeout).read().decode("utf-8", "ignore")
+        parsed = json.loads(payload)
+    except Exception:
+        return None
+
+    data = parsed.get("data") if isinstance(parsed, dict) else None
+    if not isinstance(data, dict):
+        return None
+
+    real_room_id = str(data.get("room_id") or room_id)
+    room_name = str(data.get("room_name") or "")
+    raw_status = data.get("room_status")
+    try:
+        room_status = int(raw_status)
+    except (TypeError, ValueError):
+        return None
+
+    if room_status == 1:
+        return RoomStatus(real_room_id, "live", "\u5f00\u64ad", room_name, show_status=1, video_loop=0)
+    if room_status == 2:
+        return RoomStatus(real_room_id, "offline", "\u5173\u64ad", room_name, show_status=2, video_loop=None)
+    return RoomStatus(real_room_id, "unknown", "\u672a\u77e5", room_name, show_status=room_status, video_loop=None)
 
 
 def _extract_first_int(html: str, keys: list[str]) -> int | None:
