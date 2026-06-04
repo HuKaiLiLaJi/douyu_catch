@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 import re
 
 from .models import DanmuMessage, MySQLConfig
@@ -10,6 +11,7 @@ from .models import DanmuMessage, MySQLConfig
 
 ROOM_TABLE_PREFIX = "danmu_room_"
 SESSION_TABLE_NAME = "capture_sessions"
+AI_REPORT_TABLE_NAME = "ai_session_reports"
 
 
 class MySQLDanmuWriter:
@@ -20,6 +22,7 @@ class MySQLDanmuWriter:
         self._connection = None
         self._ensured_tables: set[str] = set()
         self._session_table_ensured = False
+        self._ai_report_table_ensured = False
 
     def connect(self) -> None:
         try:
@@ -232,6 +235,74 @@ class MySQLDanmuWriter:
             sql = f"DELETE FROM {table} WHERE session_id = %s"
             cursor.execute(sql, (session_id,))
             return int(cursor.rowcount)
+
+    def get_ai_report(self, session_id: int) -> dict[str, object] | None:
+        if self._connection is None:
+            self.connect()
+        self.ensure_ai_report_table()
+
+        table = quote_mysql_identifier(AI_REPORT_TABLE_NAME)
+        sql = f"""
+        SELECT id, session_id, model, report_json, created_at, updated_at
+        FROM {table}
+        WHERE session_id = %s
+        """
+        with self._connection.cursor() as cursor:
+            cursor.execute(sql, (session_id,))
+            row = cursor.fetchone()
+            if row is None:
+                return None
+            columns = [column[0] for column in cursor.description]
+        report = serialize_mysql_row(dict(zip(columns, row)))
+        report["report"] = json.loads(str(report.pop("report_json") or "{}"))
+        return report
+
+    def save_ai_report(self, session_id: int, model: str, report: dict[str, object]) -> dict[str, object]:
+        if self._connection is None:
+            self.connect()
+        self.ensure_ai_report_table()
+
+        table = quote_mysql_identifier(AI_REPORT_TABLE_NAME)
+        report_json = json.dumps(report, ensure_ascii=False)
+        sql = f"""
+        INSERT INTO {table} (session_id, model, report_json)
+        VALUES (%s, %s, %s)
+        ON DUPLICATE KEY UPDATE
+          model = VALUES(model),
+          report_json = VALUES(report_json),
+          updated_at = CURRENT_TIMESTAMP
+        """
+        with self._connection.cursor() as cursor:
+            cursor.execute(sql, (session_id, model, report_json))
+        saved = self.get_ai_report(session_id)
+        if saved is None:
+            raise RuntimeError("AI report was not saved")
+        return saved
+
+    def ensure_ai_report_table(self) -> None:
+        if self._connection is None:
+            self.connect()
+        if self._ai_report_table_ensured:
+            return
+
+        table = quote_mysql_identifier(AI_REPORT_TABLE_NAME)
+        sql = f"""
+        CREATE TABLE IF NOT EXISTS {table} (
+          id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+          session_id BIGINT UNSIGNED NOT NULL,
+          model VARCHAR(128) NOT NULL,
+          report_json JSON NOT NULL,
+          created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+          PRIMARY KEY (id),
+          UNIQUE KEY uq_session_id (session_id),
+          KEY idx_created_at (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        """
+        with self._connection.cursor() as cursor:
+            cursor.execute(sql)
+        self._ai_report_table_ensured = True
 
     def ensure_session_table(self) -> None:
         if self._connection is None:

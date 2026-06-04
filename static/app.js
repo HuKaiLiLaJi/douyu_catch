@@ -268,7 +268,7 @@ function attachTaskStream(task, streamUrl) {
     task.nodes.summary.textContent = `\u8fd0\u884c ${data.elapsed} \u79d2\uff0c\u5171 ${data.count} \u6761\uff0c\u4f1a\u8bdd ${data.session_id}\uff0c\u5df2\u5199\u5165\u8868 ${data.table}`;
     closeTaskStream(task);
     loadRunningTasks();
-loadHistorySessions();
+    loadHistorySessions();
   });
 
   task.stream.addEventListener("cancelled", (event) => {
@@ -281,7 +281,7 @@ loadHistorySessions();
     task.nodes.summary.textContent = `${data.message}\uff0c\u5220\u9664 ${data.deleted_count || 0} \u6761`;
     closeTaskStream(task);
     loadRunningTasks();
-loadHistorySessions();
+    loadHistorySessions();
   });
 
   task.stream.addEventListener("error", (event) => {
@@ -297,7 +297,7 @@ loadHistorySessions();
     }
     closeTaskStream(task);
     loadRunningTasks();
-loadHistorySessions();
+    loadHistorySessions();
   });
 }
 
@@ -457,6 +457,19 @@ async function showHistorySession(sessionId) {
     });
     nodes.panel.classList.add("history-panel");
     nodes.summary.textContent = `\u5171 ${data.messages.length} \u6761\uff0c\u8868 ${session.table_name}\uff0c\u4f1a\u8bdd ${session.id}`;
+    const analyzeButton = document.createElement("button");
+    analyzeButton.type = "button";
+    analyzeButton.className = "secondary-button";
+    analyzeButton.textContent = "AI \u5206\u6790";
+    analyzeButton.addEventListener("click", () => analyzeHistorySession(session.id, nodes, analyzeButton));
+    nodes.controls.append(analyzeButton);
+
+    const aiReport = document.createElement("div");
+    aiReport.className = "ai-report";
+    aiReport.hidden = true;
+    nodes.summary.after(aiReport);
+    nodes.aiReport = aiReport;
+
     nodes.tbody.textContent = "";
     if (data.messages.length) {
       data.messages.forEach((message) => appendMessage(nodes.tbody, message));
@@ -470,6 +483,66 @@ async function showHistorySession(sessionId) {
   } catch (error) {
     setStatus(error.message || "\u52a0\u8f7d\u4f1a\u8bdd\u5f39\u5e55\u5931\u8d25", "error");
   }
+}
+
+async function analyzeHistorySession(sessionId, nodes, buttonEl) {
+  buttonEl.disabled = true;
+  buttonEl.textContent = "\u5206\u6790\u4e2d";
+  nodes.aiReport.hidden = false;
+  nodes.aiReport.textContent = "\u6b63\u5728\u8fdb\u884c AI \u79bb\u7ebf\u5206\u6790...";
+
+  try {
+    const response = await fetch(`/api/sessions/${sessionId}/analyze`, { method: "POST" });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "AI \u5206\u6790\u5931\u8d25");
+    }
+    renderAIReport(nodes.aiReport, data.report.report, data.report.model, data.cached);
+    buttonEl.textContent = "\u91cd\u65b0\u5206\u6790";
+  } catch (error) {
+    nodes.aiReport.textContent = error.message || "AI \u5206\u6790\u5931\u8d25";
+    buttonEl.textContent = "AI \u5206\u6790";
+  } finally {
+    buttonEl.disabled = false;
+  }
+}
+
+function renderAIReport(container, report, model, cached) {
+  container.textContent = "";
+
+  const title = document.createElement("h3");
+  title.textContent = cached ? `AI \u5206\u6790\u62a5\u544a\uff08\u5df2\u7f13\u5b58\uff09` : "AI \u5206\u6790\u62a5\u544a";
+  container.append(title);
+
+  const modelLine = document.createElement("p");
+  modelLine.className = "ai-meta";
+  modelLine.textContent = model ? `\u6a21\u578b\uff1a${model}` : "";
+  container.append(modelLine);
+
+  appendReportSection(container, "\u603b\u7ed3", report.summary || "-");
+  appendReportSection(container, "\u4e3b\u8981\u8bdd\u9898", report.topics || []);
+  appendReportSection(container, "\u60c5\u7eea\u503e\u5411", report.sentiment || "-");
+  appendReportSection(container, "\u5173\u952e\u8bcd", report.keywords || []);
+  appendReportSection(container, "\u98ce\u9669\u63d0\u9192", report.risks || []);
+  appendReportSection(container, "\u5efa\u8bae", report.suggestions || []);
+}
+
+function appendReportSection(container, label, value) {
+  const section = document.createElement("section");
+  const heading = document.createElement("strong");
+  heading.textContent = label;
+  section.append(heading);
+
+  if (Array.isArray(value)) {
+    const content = document.createElement("p");
+    content.textContent = value.length ? value.join("\u3001") : "-";
+    section.append(content);
+  } else {
+    const content = document.createElement("p");
+    content.textContent = value || "-";
+    section.append(content);
+  }
+  container.append(section);
 }
 
 form.addEventListener("submit", async (event) => {

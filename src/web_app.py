@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from flask import Flask, Response, jsonify, render_template, request, stream_with_context
 
+from .ai_analysis import AIAnalysisError, analyze_danmu_session
 from .client import DouyuDanmuClient
 from .models import MySQLConfig
 from .room_status import fetch_room_status
@@ -23,6 +24,8 @@ DEFAULT_DANMU_HOST = "danmuproxy.douyu.com"
 DEFAULT_DANMU_PORT = 8601
 MAX_CAPTURE_SECONDS = 3600
 TASK_EVENT_TIMEOUT_SECONDS = 1.0
+MIN_ANALYSIS_MESSAGES = 500
+MIN_ANALYSIS_SECONDS = 600
 
 
 @dataclass
@@ -430,6 +433,38 @@ def create_app() -> Flask:
         session, messages = result
         return jsonify({"session": session, "messages": messages})
 
+    @app.post("/api/sessions/<int:session_id>/analyze")
+    def analyze_capture_session(session_id: int):
+        writer = MySQLDanmuWriter(web_mysql_config())
+        try:
+            cached = writer.get_ai_report(session_id)
+            if cached is not None and request.args.get("refresh") != "1":
+                return jsonify({"cached": True, "report": cached})
+
+            session = writer.get_session(session_id)
+            if session is None:
+                return jsonify({"error": "\u4f1a\u8bdd\u4e0d\u5b58\u5728"}), 404
+            rejection = validate_analysis_session(session)
+            if rejection:
+                return jsonify({"error": rejection}), 422
+
+            result = writer.list_session_messages(session_id, limit=2000)
+            if result is None:
+                return jsonify({"error": "\u4f1a\u8bdd\u4e0d\u5b58\u5728"}), 404
+            session, messages = result
+            if len(messages) < MIN_ANALYSIS_MESSAGES:
+                return jsonify({"error": f"\u5f39\u5e55\u6761\u6570\u4e0d\u591f\uff0c\u81f3\u5c11\u9700\u8981 {MIN_ANALYSIS_MESSAGES} \u6761\uff0c\u5f53\u524d {len(messages)} \u6761"}), 422
+
+            report = analyze_danmu_session(session, messages)
+            saved = writer.save_ai_report(session_id, str(report.get("model") or ""), report)
+            return jsonify({"cached": False, "report": saved})
+        except AIAnalysisError as exc:
+            return jsonify({"error": str(exc)}), 503
+        except Exception as exc:
+            return jsonify({"error": f"AI \u5206\u6790\u5931\u8d25: {exc}"}), 500
+        finally:
+            writer.close()
+
     @app.get("/api/capture-stream")
     def capture_stream_compat():
         room_id = str(request.args.get("room_id", "")).strip()
@@ -469,6 +504,39 @@ def validate_capture_request(room_id: str, duration_seconds: int) -> str:
     if duration_seconds > MAX_CAPTURE_SECONDS:
         return f"\u5355\u6b21\u6700\u591a\u6293\u53d6 {MAX_CAPTURE_SECONDS} \u79d2"
     return ""
+
+
+def validate_analysis_session(session: dict[str, object]) -> str:
+    if session.get("status") != "completed":
+        return "\u53ea\u80fd\u5206\u6790\u5df2\u5b8c\u6210\u7684\u91c7\u96c6\u4f1a\u8bdd"
+
+    duration = session_duration_seconds(session)
+    if duration < MIN_ANALYSIS_SECONDS:
+        return f"\u91c7\u96c6\u65f6\u957f\u4e0d\u591f\uff0c\u81f3\u5c11\u9700\u8981 {MIN_ANALYSIS_SECONDS // 60} \u5206\u949f\uff0c\u5f53\u524d\u7ea6 {int(duration)} \u79d2"
+
+    message_count = int(session.get("message_count") or 0)
+    if message_count < MIN_ANALYSIS_MESSAGES:
+        return f"\u5f39\u5e55\u6761\u6570\u4e0d\u591f\uff0c\u81f3\u5c11\u9700\u8981 {MIN_ANALYSIS_MESSAGES} \u6761\uff0c\u5f53\u524d {message_count} \u6761"
+    return ""
+
+
+def session_duration_seconds(session: dict[str, object]) -> float:
+    started_at = parse_session_datetime(session.get("started_at"))
+    ended_at = parse_session_datetime(session.get("ended_at"))
+    if started_at is not None and ended_at is not None:
+        return max(0.0, (ended_at - started_at).total_seconds())
+    return float(session.get("requested_duration") or 0)
+
+
+def parse_session_datetime(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value))
+    except ValueError:
+        return None
 
 
 def _stream_task_events(task: CaptureTask):

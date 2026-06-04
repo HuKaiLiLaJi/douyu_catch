@@ -350,6 +350,42 @@ button:disabled {
   border-color: #cbd5e1;
 }
 
+
+.ai-report {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #dbe4f0;
+  border-radius: 8px;
+  padding: 14px;
+  background: #f8fafc;
+}
+
+.ai-report h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.ai-report section {
+  display: grid;
+  gap: 4px;
+}
+
+.ai-report section strong {
+  color: #344054;
+  font-size: 13px;
+}
+
+.ai-report p {
+  margin: 0;
+  color: #475467;
+  line-height: 1.6;
+}
+
+.ai-meta {
+  color: #667085;
+  font-size: 13px;
+}
+
 .table-wrap {
   overflow: auto;
   border: 1px solid #dde2ea;
