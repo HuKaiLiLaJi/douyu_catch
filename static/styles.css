@@ -234,6 +234,7 @@ button:disabled {
 }
 
 
+.running-section,
 .history-section {
   display: grid;
   gap: 12px;
@@ -268,11 +269,13 @@ button:disabled {
   font-size: 14px;
 }
 
+.running-list,
 .history-list {
   display: grid;
   gap: 8px;
 }
 
+.running-item,
 .history-item {
   display: flex;
   justify-content: space-between;
@@ -294,16 +297,20 @@ button:disabled {
   border-color: #ff9a72;
 }
 
+.running-item strong,
+.running-item span,
 .history-item strong,
 .history-item span {
   display: block;
 }
 
+.running-item strong,
 .history-item strong {
   font-size: 14px;
   line-height: 1.4;
 }
 
+.running-item span,
 .history-item span {
   margin-top: 3px;
   color: #667085;
@@ -408,6 +415,7 @@ tr:last-child td {
   .status-row,
   .session-header,
   .section-heading,
+  .running-item,
   .history-item,
   .session-controls {
     align-items: flex-start;
@@ -416,6 +424,7 @@ tr:last-child td {
     padding: 12px 0;
   }
 
+  .running-item,
   .history-item {
     padding: 10px 12px;
   }

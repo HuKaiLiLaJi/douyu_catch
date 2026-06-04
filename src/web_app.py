@@ -83,18 +83,36 @@ class CaptureTaskManager:
         self._tasks: dict[str, CaptureTask] = {}
         self._lock = threading.Lock()
 
-    def start(self, room_id: str, duration_seconds: int) -> CaptureTask:
-        task = CaptureTask(
-            task_id=str(uuid4()),
-            room_id=str(room_id),
-            duration_seconds=duration_seconds,
-            table_name=room_table_name(room_id),
-        )
+    def start(self, room_id: str, duration_seconds: int) -> tuple[CaptureTask | None, CaptureTask | None]:
+        normalized_room_id = str(room_id).strip()
         with self._lock:
+            existing = self._find_active_room_task_unlocked(normalized_room_id)
+            if existing is not None:
+                return None, existing
+
+            task = CaptureTask(
+                task_id=str(uuid4()),
+                room_id=normalized_room_id,
+                duration_seconds=duration_seconds,
+                table_name=room_table_name(normalized_room_id),
+            )
             self._tasks[task.task_id] = task
+
         thread = threading.Thread(target=self._run_task, args=(task,), daemon=True)
         thread.start()
-        return task
+        return task, None
+
+    def running_tasks(self) -> list[dict[str, Any]]:
+        with self._lock:
+            tasks = [task.snapshot() for task in self._tasks.values() if task.ended_at is None]
+        return sorted(tasks, key=lambda task: task["elapsed"], reverse=True)
+
+    def _find_active_room_task_unlocked(self, room_id: str) -> CaptureTask | None:
+        normalized_room_id = str(room_id).strip()
+        for task in self._tasks.values():
+            if task.ended_at is None and task.room_id == normalized_room_id:
+                return task
+        return None
 
     def get(self, task_id: str) -> CaptureTask | None:
         with self._lock:
@@ -330,7 +348,13 @@ def create_app() -> Flask:
         if error:
             return jsonify({"error": error}), 400
 
-        task = task_manager.start(room_id, duration_seconds)
+        task, existing = task_manager.start(room_id, duration_seconds)
+        if existing is not None:
+            return jsonify({
+                "error": f"\u623f\u95f4 {room_id} \u5df2\u6709\u91c7\u96c6\u4efb\u52a1\u6b63\u5728\u8fd0\u884c\uff0c\u8bf7\u7b49\u5f85\u7ed3\u675f\u6216\u505c\u6b62\u540e\u518d\u542f\u52a8",
+                "task": existing.snapshot(),
+            }), 409
+
         return jsonify({
             "task_id": task.task_id,
             "room_id": task.room_id,
@@ -338,6 +362,10 @@ def create_app() -> Flask:
             "status_url": f"/api/tasks/{task.task_id}",
             "stream_url": f"/api/tasks/{task.task_id}/stream",
         }), 202
+
+    @app.get("/api/tasks")
+    def list_running_tasks():
+        return jsonify({"tasks": task_manager.running_tasks()})
 
     @app.get("/api/tasks/<task_id>")
     def get_capture_task(task_id: str):
@@ -414,7 +442,12 @@ def create_app() -> Flask:
         if error:
             return jsonify({"error": error}), 400
 
-        task = task_manager.start(room_id, duration_seconds)
+        task, existing = task_manager.start(room_id, duration_seconds)
+        if existing is not None:
+            return jsonify({
+                "error": f"\u623f\u95f4 {room_id} \u5df2\u6709\u91c7\u96c6\u4efb\u52a1\u6b63\u5728\u8fd0\u884c\uff0c\u8bf7\u7b49\u5f85\u7ed3\u675f\u6216\u505c\u6b62\u540e\u518d\u542f\u52a8",
+                "task": existing.snapshot(),
+            }), 409
         return Response(
             stream_with_context(_stream_task_events(task)),
             mimetype="text/event-stream",

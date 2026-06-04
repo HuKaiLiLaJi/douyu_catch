@@ -6,6 +6,9 @@ const button = document.querySelector("#capture-button");
 const statusEl = document.querySelector("#status");
 const summaryEl = document.querySelector("#summary");
 const sessionsEl = document.querySelector("#sessions");
+const runningStatusEl = document.querySelector("#running-status");
+const runningListEl = document.querySelector("#running-list");
+const refreshRunningButton = document.querySelector("#refresh-running");
 const historyStatusEl = document.querySelector("#history-status");
 const historyListEl = document.querySelector("#history-list");
 const refreshHistoryButton = document.querySelector("#refresh-history");
@@ -27,6 +30,13 @@ function formatTime(value) {
 
 function formatCountdown(seconds) {
   const normalized = Math.max(0, Math.ceil(seconds));
+  const minutes = Math.floor(normalized / 60);
+  const restSeconds = normalized % 60;
+  return `${String(minutes).padStart(2, "0")}:${String(restSeconds).padStart(2, "0")}`;
+}
+
+function formatDuration(seconds) {
+  const normalized = Math.max(0, Math.floor(seconds || 0));
   const minutes = Math.floor(normalized / 60);
   const restSeconds = normalized % 60;
   return `${String(minutes).padStart(2, "0")}:${String(restSeconds).padStart(2, "0")}`;
@@ -257,7 +267,8 @@ function attachTaskStream(task, streamUrl) {
     setTaskState(task, "\u5df2\u5b8c\u6210", "success");
     task.nodes.summary.textContent = `\u8fd0\u884c ${data.elapsed} \u79d2\uff0c\u5171 ${data.count} \u6761\uff0c\u4f1a\u8bdd ${data.session_id}\uff0c\u5df2\u5199\u5165\u8868 ${data.table}`;
     closeTaskStream(task);
-    loadHistorySessions();
+    loadRunningTasks();
+loadHistorySessions();
   });
 
   task.stream.addEventListener("cancelled", (event) => {
@@ -269,7 +280,8 @@ function attachTaskStream(task, streamUrl) {
     clearTaskMessages(task);
     task.nodes.summary.textContent = `${data.message}\uff0c\u5220\u9664 ${data.deleted_count || 0} \u6761`;
     closeTaskStream(task);
-    loadHistorySessions();
+    loadRunningTasks();
+loadHistorySessions();
   });
 
   task.stream.addEventListener("error", (event) => {
@@ -284,7 +296,8 @@ function attachTaskStream(task, streamUrl) {
       task.nodes.summary.textContent = "\u5b9e\u65f6\u8fde\u63a5\u5df2\u4e2d\u65ad\uff0c\u540e\u53f0\u4efb\u52a1\u4ecd\u4f1a\u7ee7\u7eed\u8fd0\u884c";
     }
     closeTaskStream(task);
-    loadHistorySessions();
+    loadRunningTasks();
+loadHistorySessions();
   });
 }
 
@@ -320,6 +333,53 @@ async function cancelTask(task) {
     }
     setTaskState(task, "\u8fd0\u884c\u4e2d", "loading");
     setStatus(error.message || "\u505c\u6b62\u4efb\u52a1\u5931\u8d25", "error");
+  }
+}
+
+function renderRunningTasks(runningTasks) {
+  runningListEl.textContent = "";
+  if (!runningTasks.length) {
+    runningStatusEl.textContent = "\u5f53\u524d\u6ca1\u6709\u6b63\u5728\u8fd0\u884c\u7684\u91c7\u96c6\u4efb\u52a1";
+    return;
+  }
+
+  runningStatusEl.textContent = `\u5171 ${runningTasks.length} \u4e2a\u8fd0\u884c\u4efb\u52a1`;
+  runningTasks.forEach((task) => {
+    const item = document.createElement("div");
+    item.className = "running-item";
+
+    const main = document.createElement("div");
+    const roomName = task.room_name ? `\uff08${task.room_name}\uff09` : "";
+    const title = document.createElement("strong");
+    title.textContent = `\u623f\u95f4 ${task.room_id}${roomName}`;
+
+    const elapsed = task.elapsed || 0;
+    const remaining = Math.max(0, (task.duration || 0) - elapsed);
+    const meta = document.createElement("span");
+    const session = task.session_id ? `\uff0c\u4f1a\u8bdd ${task.session_id}` : "";
+    meta.textContent = `\u5df2\u6293\u53d6 ${task.count || 0} \u6761\uff0c\u8fd0\u884c ${formatDuration(elapsed)}\uff0c\u5269\u4f59 ${formatDuration(remaining)}${session}`;
+    main.append(title, meta);
+
+    const badge = document.createElement("span");
+    badge.className = "history-badge";
+    badge.dataset.mode = stateMode(task.status);
+    badge.textContent = statusLabel(task.status);
+
+    item.append(main, badge);
+    runningListEl.append(item);
+  });
+}
+
+async function loadRunningTasks() {
+  try {
+    const response = await fetch("/api/tasks");
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || "\u52a0\u8f7d\u8fd0\u884c\u4efb\u52a1\u5931\u8d25");
+    }
+    renderRunningTasks(data.tasks || []);
+  } catch (error) {
+    runningStatusEl.textContent = error.message || "\u52a0\u8f7d\u8fd0\u884c\u4efb\u52a1\u5931\u8d25";
   }
 }
 
@@ -472,6 +532,7 @@ form.addEventListener("submit", async (event) => {
 
     setStatus("\u540e\u53f0\u4efb\u52a1\u5df2\u521b\u5efa", "success");
     summaryEl.textContent = `\u65b0\u4efb\u52a1 ID\uff1a${data.task_id}`;
+    loadRunningTasks();
     loadHistorySessions();
   } catch (error) {
     setStatus(error.message || "\u521b\u5efa\u4efb\u52a1\u5931\u8d25", "error");
@@ -480,7 +541,9 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
+refreshRunningButton.addEventListener("click", loadRunningTasks);
 refreshHistoryButton.addEventListener("click", loadHistorySessions);
+window.setInterval(loadRunningTasks, 5000);
 
 window.addEventListener("beforeunload", () => {
   tasks.forEach((task) => {
@@ -489,4 +552,5 @@ window.addEventListener("beforeunload", () => {
   });
 });
 
+loadRunningTasks();
 loadHistorySessions();
